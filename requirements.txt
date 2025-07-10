@@ -1,0 +1,17 @@
+pandas
+requests
+python-dotenv
+pyTelegramBotAPI
+lxml
+rapidfuzz
+schedule
+pytz
+yfinance
+feedparser
+langchain
+langchain_community
+grpcio
+yandexcloud
+pydub
+transformers
+# torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
