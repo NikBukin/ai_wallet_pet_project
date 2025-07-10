@@ -63,9 +63,7 @@ def get_news_texts(name: str, type_active: str, shortname: str) -> list:
 def analyze_assets_with_news(chat_id: int, bot) -> dict:
     assets = Repository.select_by_id_telebot(chat_id)
     assets = assets[['name_active', 'shortname_active', 'type_active']].drop_duplicates().to_dict(orient='records')
-    print(assets)
     processed_news = {}  # Ключ: news_text, Значение: (results, link)
-    print(2)
     for asset in assets:
         name = asset["name_active"]
         short = asset["shortname_active"]
@@ -74,21 +72,19 @@ def analyze_assets_with_news(chat_id: int, bot) -> dict:
             news_tuple = get_news_texts(name, type_act, short)[0]
         except:
             news_tuple = None
-        print(news_tuple)
 
         if not news_tuple:
             continue
 
         news_texts, link = news_tuple
         if news_texts in processed_news:
-            print("⏩ Повторная новость, пропускаем LLM")
+            print("Повторная новость")
             processed_news[news_texts]["name_active"].append(name)
             processed_news[news_texts]["shorntame_active"].append(short)
             processed_news[news_texts]["link"].append(link)
 
         else:
             try:
-                print(news_texts)
                 analysis = chain_one_active.run(name_active=name, shortname_active=short, news_text=news_texts)
                 results = analysis.strip()
                 processed_news[news_texts] = {"llm_result": results,
@@ -99,10 +95,6 @@ def analyze_assets_with_news(chat_id: int, bot) -> dict:
             except Exception as e:
                 results = f"⚠️ Ошибка анализа: {e}"
 
-        # bot.send_message(chat_id, results, parse_mode="Markdown", reply_markup=url_news_button(link))
-    # with open("llm_news_analysis.json", "w", encoding="utf-8") as file:
-    #     json.dump(processed_news, file, indent=5)
-    print(processed_news)
 
     text_to_prompt = ""
     for an_news in processed_news.keys():
