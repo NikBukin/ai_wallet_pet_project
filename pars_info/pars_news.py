@@ -6,7 +6,12 @@ from datetime import datetime, timedelta
 from rapidfuzz import fuzz
 
 
-def extract_article_text(url):
+def extract_article_text(url:str)->str:
+    """
+    Переходит по ссылке и получает текст нрврсти
+    :param url: ссылка на новость
+    """
+
     headers = {
         'User-Agent': 'Mozilla/5.0'
     }
@@ -39,10 +44,12 @@ def extract_article_text(url):
         return ""
 
 # Российские акции Finam
-def get_finam_news(ticker_list=None, max_entries=10, min_score=70):
+def get_finam_news(ticker_list:list, max_entries=10, min_score=70)->list:
     """
-    ticker_list — список [SBER, GAZP, LKOH]
-    min_score — минимальный порог похожести
+    Получение новостей российских ценных бумаг с finam.ru по заданным активам
+    :param ticker_list: список активов (Например, SBER, GAZP, LKOH)
+    :param min_score: минимальный порог похожести
+    :param max_entries: максимальное количество новостей в списке
     """
     rss_url = "https://www.finam.ru/analysis/conews/rsspoint/"
     feed = feedparser.parse(rss_url)
@@ -87,7 +94,12 @@ def get_finam_news(ticker_list=None, max_entries=10, min_score=70):
 
 
 # Иностранные акции и металлы через Yahoo Finance RSS
-def get_yahoo_news(query, max_entries=10):
+def get_yahoo_news(query:str, max_entries=10)->list:
+    """
+    Получение новостей иностранных ценных бумаг с yahoo.com по заданному активу
+    :param query: иностранная ценная бумага
+    :param max_entries: максимальное количество новостей в списке
+    """
     feed_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={query}&region=US&lang=en-US"
     feed = feedparser.parse(feed_url)
     news = []
@@ -108,7 +120,12 @@ def get_yahoo_news(query, max_entries=10):
 
 
 # CryptoCompare – криптовалюты
-def get_crypto_news(query="bitcoin", max_entries=10):
+def get_crypto_news(query:str, max_entries=10)->list:
+    """
+    Получение новостей криптовалют с cryptocompare.com по заданному активу
+    :param query: название монеты
+    :param max_entries: максимальное количество новостей в списке
+    """
     url = f"https://min-api.cryptocompare.com/data/v2/news/?lang=EN"
     response = requests.get(url)
     news = response.json().get("Data", [])

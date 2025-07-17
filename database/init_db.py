@@ -3,21 +3,24 @@ import sqlite3
 DB_PATH = "db_active.db"
 
 def init_db():
+    """
+    Инициализирует пустую базу данных sqlite3 в случае ее отсутствия в проекте
+    """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS my_table (
+        CREATE TABLE IF NOT EXISTS assets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_telebot INTEGER,
-            name_telebot TEXT,
-            date TEXT,
+            user_id INTEGER,
+            user_name TEXT,
+            information_upload_date TEXT,
             type_active TEXT,
-            name_active TEXT,
-            shortname_active TEXT,
-            count REAL,
-            day_buy TEXT,
-            price_buy_USD REAL,
-            price_buy_RUB REAL
+            name_of_the_asset TEXT,
+            second_name_of_the_asset TEXT,
+            amount_of_asset REAL,
+            asset_purchase_date TEXT,
+            purchase_price_of_one_asset_in_dollars REAL,
+            purchase_price_of_one_asset_in_rubles REAL
         )
     """)
     conn.commit()

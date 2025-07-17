@@ -30,4 +30,20 @@ def escape_markdown_v2(text: str) -> str:
     return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", text)
 
 
+def generate_answer(parsed):
+    # parsed может быть None, если LLM не нашла JSON вовсе
+    if not parsed:
+        return "⚠️ LLM не вернула структуру. Попробуйте иначе."
+
+    # 5) Определяем, каких полей не хватает
+    missing = []
+    print(parsed)
+    for key in ["name_active", "count", "price", "currency", "day_buy"]:
+        val = parsed.get(key) if key in parsed else None
+        if val is None or (isinstance(val, str) and not val.strip()) or (isinstance(val, (int, float)) and val == 0 and key not in ["count"]):
+            missing.append(key)
+
+    return parsed, missing
+
+
 

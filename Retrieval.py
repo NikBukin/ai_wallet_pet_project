@@ -3,20 +3,38 @@ import pdfplumber
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
 
 
 def extract_text_from_pdf(pdf_path):
+    """
+    Извлекает текст из PDF-файла.
+    """
     with pdfplumber.open(pdf_path) as pdf:
         return "\n".join([page.extract_text() or "" for page in pdf.pages])
 
-pdf_dir = "content"
-texts = []
 
+pdf_dir = "content"  # Папка с вашими PDF-файлами
+rag_vector_db_path = "content/rag_vector_db"  # Папка для сохранения FAISS DB
+
+documents = []  # Будем хранить объекты Document
+
+print(f"Поиск PDF-файлов в: {pdf_dir}")
+# Проходим по всем PDF-файлам и извлекаем текст, создавая объекты Document
 for filename in os.listdir(pdf_dir):
     if filename.endswith(".pdf"):
-        full_path = os.path.join(pdf_dir, filename)
-        texts.append(extract_text_from_pdf(full_path))
+        full_path = pdf_dir + "/" + filename  # Используем Path для правильного объединения путей
+        text = extract_text_from_pdf(full_path)
 
+        # Создаем объект Document для каждого файла
+        # Метаданные будут содержать путь к исходному файлу
+        doc = Document(page_content=text, metadata={"source": str(full_path)})
+        documents.append(doc)
+        print(f"Извлечен текст из: {filename}")
+
+if not documents:
+    print(f"⚠️ PDF-файлы не найдены в директории: {pdf_dir}. Убедитесь, что файлы присутствуют.")
+    exit()  # Прерываем выполнение, если нет документов для обработки
 
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=1000,
@@ -24,18 +42,14 @@ splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", ".", " ", ""]
 )
 
-chunks = []
-for text in texts:
-    chunks += splitter.split_text(text)
+chunks = splitter.split_documents(documents)
 
-print(f"Всего чанков: {len(chunks)}")
+print(f"Всего чанков создано: {len(chunks)}")
 
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
-vectorstore = FAISS.from_texts(texts=chunks, embedding=embedding_model)
+vectorstore = FAISS.from_documents(documents=chunks, embedding=embedding_model)
 
 # Сохраняем на диск
-vectorstore.save_local("content/rag_vector_db")
+vectorstore.save_local(str(rag_vector_db_path))
 
-query = "Какие сигналы даёт индикатор RSI?"
-docs = vectorstore.similarity_search(query, k=4)
-retrieved_context = "\n\n".join([doc.page_content for doc in docs])
+print(f"✅ Векторная база данных успешно создана и сохранена с метаданными в: {rag_vector_db_path}")

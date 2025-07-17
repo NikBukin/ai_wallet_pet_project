@@ -1,63 +1,30 @@
-from rapidfuzz import process
-from langchain_community.llms import YandexGPT
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
+from langchain.output_parsers import StructuredOutputParser, ResponseSchema # Добавляем импорты
 import json
-import os
-import re
 import datetime
-from dotenv import load_dotenv
 
-from pars_info import pars_kotr
-
-all_coins = pars_kotr.all_coins
-all_stock_rus = pars_kotr.all_stock_rus
-all_stock_for = pars_kotr.all_stock_for
-all_currency = pars_kotr.all_currency
+from pars_info import pars_kotr, search_active
 
 
-def find_best_match_func(name: str) -> dict:
-    """
-    Ищет лучший актив по неточному названию из всех категорий.
-    Возвращает словарь: {"type_active": ..., "shortname_active": ..., "name_active": ...}
-    """
-    candidates = []
-    # Российские акции
-    for row in all_stock_rus.itertuples():
-        candidates.append((f"{row.SECID} - {row.SHORTNAME}", "stock_rus", row.SECID, row.SHORTNAME))
-    # Иностранные акции / металлы
-    for row in all_stock_for.itertuples():
-        candidates.append((f"{row.Symbol} - {row.Security}", "stock_for", row.Symbol, row.Security))
-    # Валюты
-    for k, v in all_currency.items():
-        candidates.append((f"{k} - {v}", "currency", k, k))
-    # Криптовалюты
-    for row in all_coins.itertuples():
-        candidates.append((f"{row.id} - {row.name}", "cripto", row.id, row.name))
+# Формирование структуры для вывода в json-формате
+response_schemas = [
+    ResponseSchema(name="name_text", description="название актива, как оно упомянуто в тексте"),
+    ResponseSchema(name="count", description="количество (число)"),
+    ResponseSchema(name="price", description="цена за единицу (число)"),
+    ResponseSchema(name="currency", description="валюта цены ('USD' или 'RUB')"),
+    ResponseSchema(name="day_buy", description="дата покупки в формате 'дд.мм.гггг'")
+]
+output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+format_instructions = output_parser.get_format_instructions()
 
-    search_list = [c[0] for c in candidates]
-    matches = process.extract(name, search_list, limit=1, score_cutoff=50)
-
-    if not matches:
-        return None
-
-    best = matches[0][0]
-    for c in candidates:
-        if c[0] == best:
-            return {"type_active": c[1], "shortname_active": c[2], "name_active": c[3]}
-    return None
-
-
+# prompt_template с использованием format_instructions
 prompt_template = PromptTemplate(
     input_variables=["text"],
+    partial_variables={"format_instructions": format_instructions},
     template="""
 Ты бот, который извлекает из фразы параметры покупки финансового актива.
-Нужен JSON со следующими полями:
-- "name_text": название актива, как оно упомянуто в тексте (неточно),
-- "count": количество (число),
-- "price": цена за единицу (число),
-- "currency": валюта цены ("USD" или "RUB"),
-- "day_buy": дата покупки в формате "дд.мм.гггг".
+{format_instructions}
 
 Если что-то не можешь вычленить, оставляй пустым ""
 
@@ -90,96 +57,86 @@ prompt_template = PromptTemplate(
 """
 )
 
-load_dotenv()
-folder_id = os.getenv("FOLDER_ID_LLM")
-api_key = os.getenv("API_KEY_LLM")
 
-
-llm = YandexGPT(folder_id=folder_id, api_key=api_key)
-
-chain = LLMChain(llm=llm, prompt=prompt_template, verbose=False)
-
-def insert_active(input_text = "Я купил 5 акций SBER 2 июня 2025 года по цене 300 рублей за штуку."):
+def llm_insert_active(input_text: str, llm) -> dict:
+    """
+    Создание json структуры из запроса пользователя
+    :param input_text: входное сообщение пользователя
+    :param llm: llm модель
+    :return:
+    """
+    chain = LLMChain(llm=llm, prompt=prompt_template, verbose=False)
     parsed_str = chain.predict(text=input_text)
-    print("Raw LLM output:\n", parsed_str)
 
-    m = re.search(r"\{[\s\S]*\}", parsed_str)
-    if m:
-        json_str = m.group(0)
-        parsed = json.loads(json_str)
+    # Парсинг json из результата llm
+    try:
+        parsed = output_parser.parse(parsed_str)
         print("Parsed fields:", parsed)
-    else:
-        print("Не удалось найти JSON в выводе LLM:")
-        print(parsed_str)
+    except Exception as e:
+        print(f"Ошибка при парсинге JSON: {e}")
+        print("Сырой вывод LLM:\n", parsed_str)
+        return None
 
+    # Поиск тикера по неточному соответствию
+    asset_info = search_active.find_best_match_func(parsed["name_text"])
 
-    asset_info = find_best_match_func(parsed["name_text"])
     if asset_info is None:
         print("\n⚠️ Актив не найден. Проверьте название или попробуйте другое.")
-    else:
-        final_data = {
-            "name_active": asset_info["name_active"],
-            "shortname_active": asset_info["shortname_active"],
-            "type_active": asset_info["type_active"],
-            "count": parsed["count"],
-            "price": parsed["price"],
-            "currency": parsed["currency"],
-            "day_buy": parsed["day_buy"]
-        }
-        print("\nFinal JSON с подтверждённым тикером:")
-        print(json.dumps(final_data, ensure_ascii=False, indent=2))
+        return None
 
-    try:
-        # Преобразуем строку day_buy → datetime.date
-        user_date = datetime.datetime.strptime(parsed["day_buy"], "%d.%m.%Y").date()
-        # Получим курс USD→RUB на эту дату:
-        ruble_df = pars_kotr.get_cbr_history(
-            currency_id="R01235",
-            date_from=user_date.strftime("%d/%m/%Y"),
-            date_to=user_date.strftime("%d/%m/%Y")
-        )
-        # get_cbr_history возвращает DataFrame с колонкой "rate" (курс рубля за 1 USD)
-        rate = ruble_df["rate"].to_list()[0]  # например, 75.1234
+    final_data = {
+        "name_active": asset_info["name_active"],
+        "shortname_active": asset_info["shortname_active"],
+        "type_active": asset_info["type_active"],
+        "count": float(parsed["count"]) if parsed["count"] else 0.0,
+        "price": float(parsed["price"]) if parsed["price"] else 0.0,
+        "currency": parsed["currency"].upper() if parsed["currency"] else "",
+        "day_buy": parsed["day_buy"] if parsed["day_buy"] else ""
+    }
 
-        # По умолчанию обнулим обе цены:
-        price_buy_USD = 0.0
-        price_buy_RUB = 0.0
+    # Инициализируем price_buy_USD и price_buy_RUB
+    final_data["price_buy_USD"] = 0.0
+    final_data["price_buy_RUB"] = 0.0
 
-        if parsed["currency"].upper() == "USD":
-            # Если LLM вернул USD, то:
-            price_buy_USD = float(parsed["price"])
-            price_buy_RUB = price_buy_USD * rate
+    # Обработка даты, курса валют и получения информации о стоимости актива в рублях\долларах
+    if final_data["day_buy"] and final_data["currency"] and final_data["price"] > 0:
+        try:
+            user_date = datetime.datetime.strptime(final_data["day_buy"], "%d.%m.%Y").date()
+            ruble_df = pars_kotr.get_cbr_history(
+                currency_id="R01235",
+                date_from=user_date.strftime("%d/%m/%Y"),
+                date_to=user_date.strftime("%d/%m/%Y")
+            )
 
-        elif parsed["currency"].upper() == "RUB":
-            # Если LLM вернул RUB, то:
-            price_buy_RUB = float(parsed["price"])
-            if rate != 0:
-                price_buy_USD = price_buy_RUB / rate
+            rate = 0.0
+            if not ruble_df.empty and "rate" in ruble_df.columns:
+                rate = ruble_df["rate"].to_list()[0]
             else:
-                price_buy_USD = 0.0
+                print(f"Не удалось получить курс валюты на дату {final_data['day_buy']}.")
 
-        else:
-            # На всякий случай, если LLM прислал что-то вроде "UsD" или "руб":
-            cur = parsed["currency"].upper()
-            if "USD" in cur:
-                price_buy_USD = float(parsed["price"])
-                price_buy_RUB = price_buy_USD * rate
+
+            if final_data["currency"].upper() == "USD":
+                final_data["price_buy_USD"] = final_data["price"]
+                final_data["price_buy_RUB"] = final_data["price_buy_USD"] * rate
+            elif final_data["currency"].upper() == "RUB":
+                final_data["price_buy_RUB"] = final_data["price"]
+                if rate != 0:
+                    final_data["price_buy_USD"] = final_data["price_buy_RUB"] / rate
+                else:
+                    final_data["price_buy_USD"] = 0.0
             else:
-                price_buy_RUB = float(parsed["price"])
-                price_buy_USD = price_buy_RUB / rate
+                print(f"Неизвестная валюта при расчете: {final_data['currency']}. Использую как USD.")
+                final_data["price_buy_USD"] = final_data["price"]
+                final_data["price_buy_RUB"] = final_data["price_buy_USD"] * rate
 
-        final_data = {
-            "name_active": asset_info["name_active"],
-            "shortname_active": asset_info["shortname_active"],
-            "type_active": asset_info["type_active"],
-            "count": parsed["count"],
-            "price_buy_USD": price_buy_USD,
-            "price_buy_RUB": price_buy_RUB,
-            "day_buy": parsed["day_buy"]
-        }
-    except:
-        pass
+        except ValueError as ve:
+            print(f"Ошибка формата даты: {ve}. Пожалуйста, убедитесь, что дата в формате дд.мм.гггг.")
+        except IndexError:
+            print("Не удалось извлечь курс валюты из DataFrame.")
+        except Exception as e:
+            print(f"Произошла ошибка при расчете цен в разных валютах: {e}")
 
-
+    print("\nFinal JSON с подтверждённым тикером:")
+    print(json.dumps(final_data, indent=2, ensure_ascii=False))
 
     return final_data

@@ -10,8 +10,9 @@ from pars_info import pars_kotr
 from pars_info.search_active import search_active_from_pars
 from models import speech_to_text, llm_news_analysis
 from database.repository import Repository
-from services.scheduler_service import escape_markdown, escape_markdown_v2
+from services.scheduler_service import escape_markdown, escape_markdown_v2, generate_answer
 from services.report_service import ReportService
+from models.llm_router import llm_router
 
 load_dotenv()
 telegram_token = os.getenv("TELEGRAM_TOKEN")
@@ -51,6 +52,8 @@ class User:
         self.missing_fields = []
         self.analysis_slov = None
 
+        self.llm_result = None
+
 
 # команда /start
 @bot.message_handler(commands=['start']
@@ -88,154 +91,130 @@ def send_welcome(message):
     bot.register_next_step_handler(msg, start_bot)
 
 
-@bot.message_handler(content_types=['voice'])
-def handle_voice(message):
-    chat_id = message.chat.id
-    user = user_dict.get(chat_id)
-    if user is None:
-        bot.send_message(chat_id, "Пожалуйста, сначала нажмите /start.")
-        return
-    # 1) Скачиваем OGG
-    file_info = bot.get_file(message.voice.file_id)
-    ogg_bytes = bot.download_file(file_info.file_path)
-
-    recognized_text = speech_to_text.generate_text_from_voice(ogg_bytes)
-    if recognized_text[0] == "⚠":
-        bot.register_next_step_handler(message, recognized_text)
-    else:
-        result = speech_to_text.generate_answer(recognized_text)
-        if isinstance(result, str):
-            bot.register_next_step_handler(message, result)
-        else:
-            parsed, missing = result
-            user.recognized_text = recognized_text
-            user.parsed_partial = parsed
-            user.missing_fields = missing
-            print("missing", missing)
-            if missing:
-                human_names = {
-                    "name_active": "название актива",
-                    "count": "количество",
-                    "price": "цену",
-                    "currency": "валюту покупки",
-                    "day_buy": "дату покупки"
-                }
-                missing_str = ", ".join(human_names[f] for f in missing)
-                ask = (
-                    f"Я смог распознать:\n\n«{recognized_text}»\n\n"
-                    f"Однако не хватает информации: {missing_str}.\n"
-                    "Пожалуйста, уточните недостающие данные (текстом или голосом), "
-                    "и я попробую дополнить."
-                )
-                bot.send_message(chat_id, ask)
-                bot.register_next_step_handler(message, handle_clarification)
-                return
-
-            # Если ничего не пропало – сразу оформляем подтверждение (как раньше)
-            user.type_active = parsed["type_active"]
-            user.name_active = parsed["name_active"]
-            user.shortname_active = parsed["shortname_active"]
-            user.count = parsed["count"]
-            user.price_buy_USD = parsed["price_USD"]
-            user.price_buy_RUB = parsed["price_RUB"]
-            user.day_buy = parsed["day_buy"]
-
-            fmt_rub = f"{user.price_buy_RUB:,.2f}".replace(",", " ")
-            fmt_usd = f"{user.price_buy_USD:,.2f}".replace(",", " ")
-            confirm_text = (
-                "Проверьте, правильно ли я понял данные:\n\n"
-                f"• Актив: *{user.name_active}* (тикер `{user.shortname_active}`)\n"
-                f"• Тип: `{user.type_active}`\n"
-                f"• Количество: `{user.count}`\n"
-                f"• Цена: `{fmt_rub}₽` / `{fmt_usd}$`\n"
-                f"• Дата покупки: `{user.day_buy}`\n\n"
-                "Добавить в базу?"
-            )
-            msg = bot.send_message(chat_id, text=confirm_text, reply_markup=keyboards.yes_or_no(),
-                                   parse_mode="Markdown")
-            bot.register_next_step_handler(msg, confirm_insert)
-
-
-@bot.message_handler(func=lambda m: True, content_types=['text', 'voice'])
+@bot.message_handler(content_types=['text', 'voice'])
 def handle_clarification(message):
-    chat_id = message.chat.id
-    user = user_dict.get(chat_id)
-    if user is None or not user.missing_fields:
-        # Либо пользователь не зарегистрирован, либо не было ожидания уточнений
-        bot.send_message(chat_id, "❗ Что-то пошло не так. Попробуйте снова.")
+    user_id = message.chat.id
+    user = user_dict.get(user_id)
+    if user is None:
+        bot.send_message(user_id, "Пожалуйста, сначала нажмите /start.")
         return
-    clarification_text = None
-    # 1) Получаем «уточнение» от пользователя
+
     if message.content_type == 'voice':
         file_info = bot.get_file(message.voice.file_id)
         ogg_bytes = bot.download_file(file_info.file_path)
 
         clarification_text = speech_to_text.generate_text_from_voice(ogg_bytes)
     elif message.content_type == 'text':
-        clarification_text = speech_to_text.generate_text_from_voice(message.text)
+        clarification_text = message.text
 
     if clarification_text[0] == "⚠":
         bot.register_next_step_handler(message, clarification_text)
     else:
         combined_input = user.recognized_text + " " + clarification_text
-        result = speech_to_text.generate_answer(combined_input)
-        if isinstance(result, str):
-            bot.register_next_step_handler(message, result)
-        else:
-            parsed, missing = result
-            user.recognized_text = combined_input
-            user.parsed_partial = parsed
-            user.missing_fields = missing
-            print("missing", missing)
+        user.recognized_text = combined_input
+        llm_result = llm_router(combined_input, user_id)
+        user.llm_result = llm_result
+        if llm_result['used_tool'] == 'add_asset_tool':
+            handle_add_asset(message)
+        elif llm_result['used_tool'] == 'analyze_news_tool':
+            handle_analyze_news(message)
+        elif llm_result['used_tool'] == 'sql_query_tool' or llm_result['used_tool'] == 'rag_tool':
+            handle_sql_query_or_rag(message)
 
-            if missing:
-                human_names = {
-                    "name_active": "название актива",
-                    "count": "количество",
-                    "price": "цену",
-                    "currency": "валюту покупки",
-                    "day_buy": "дату покупки"
-                }
-                missing_str = ", ".join(human_names[f] for f in missing)
-                ask = (
-                    f"Я смог распознать:\n\n«{clarification_text}»\n\n"
-                    f"Однако не хватает информации: {missing_str}.\n"
-                    "Пожалуйста, уточните недостающие данные (текстом или голосом), "
-                    "и я попробую дополнить."
-                )
-                bot.send_message(chat_id, ask)
-                bot.register_next_step_handler(message, handle_clarification)
-                return
 
-            # Если ничего не пропало – сразу оформляем подтверждение (как раньше)
-            user.type_active = parsed["type_active"]
-            user.name_active = parsed["name_active"]
-            user.shortname_active = parsed["shortname_active"]
-            user.count = parsed["count"]
-            user.price_buy_USD = parsed["price_USD"]
-            user.price_buy_RUB = parsed["price_RUB"]
-            user.day_buy = parsed["day_buy"]
+def handle_add_asset(message):
+    user_id = message.chat.id
+    user = user_dict.get(user_id)
+    llm_result = user.llm_result
+    parsed, missing = generate_answer(llm_result['tool_data']['data'])
+    recognized_text = user.recognized_text
+    user.parsed_partial = parsed
+    user.missing_fields = missing
+    print("missing", missing)
+    if missing:
+        human_names = {
+            "name_active": "название актива",
+            "count": "количество",
+            "price": "цену",
+            "currency": "валюту покупки",
+            "day_buy": "дату покупки"
+        }
+        missing_str = ", ".join(human_names[f] for f in missing)
+        ask = (
+            f"Я смог распознать:\n\n«{recognized_text}»\n\n"
+            f"Однако не хватает информации: {missing_str}.\n"
+            "Пожалуйста, уточните недостающие данные (текстом или голосом), "
+            "и я попробую дополнить."
+        )
+        bot.send_message(user_id, ask)
+        bot.register_next_step_handler(message, handle_clarification)
+        return
 
-            fmt_rub = f"{user.price_buy_RUB:,.2f}".replace(",", " ")
-            fmt_usd = f"{user.price_buy_USD:,.2f}".replace(",", " ")
-            confirm_text = (
-                "Проверьте, правильно ли я понял данные:\n\n"
-                f"• Актив: *{user.name_active}* (тикер `{user.shortname_active}`)\n"
-                f"• Тип: `{user.type_active}`\n"
-                f"• Количество: `{user.count}`\n"
-                f"• Цена: `{fmt_rub}₽` / `{fmt_usd}$`\n"
-                f"• Дата покупки: `{user.day_buy}`\n\n"
-                "Добавить в базу?"
-            )
-            msg = bot.send_message(chat_id, text=confirm_text, reply_markup=keyboards.yes_or_no(),
-                                   parse_mode="Markdown")
-            bot.register_next_step_handler(msg, confirm_insert)
+    # Если ничего не пропало – сразу оформляем подтверждение (как раньше)
+    user.type_active = parsed["type_active"]
+    user.name_active = parsed["name_active"]
+    user.shortname_active = parsed["shortname_active"]
+    user.count = parsed["count"]
+    user.price_buy_USD = parsed["price_buy_USD"]
+    user.price_buy_RUB = parsed["price_buy_RUB"]
+    user.day_buy = parsed["day_buy"]
+
+    fmt_rub = f"{user.price_buy_RUB:,.2f}".replace(",", " ")
+    fmt_usd = f"{user.price_buy_USD:,.2f}".replace(",", " ")
+    confirm_text = (
+        "Проверьте, правильно ли я понял данные:\n\n"
+        f"• Актив: *{user.name_active}* (тикер `{user.shortname_active}`)\n"
+        f"• Тип: `{user.type_active}`\n"
+        f"• Количество: `{user.count}`\n"
+        f"• Цена: `{fmt_rub}₽` / `{fmt_usd}$`\n"
+        f"• Дата покупки: `{user.day_buy}`\n\n"
+        "Добавить в базу?"
+    )
+    msg = bot.send_message(user_id, text=confirm_text, reply_markup=keyboards.yes_or_no(),
+                           parse_mode="Markdown")
+    bot.register_next_step_handler(msg, confirm_insert)
+
+
+def handle_analyze_news(message):
+    user_id = message.chat.id
+    user = user_dict.get(user_id)
+    user.recognized_text = ""
+    llm_result = user.llm_result
+
+    result_text = llm_result['tool_data']['result_text']
+    link = llm_result['tool_data']['link']
+    try:
+        msg = bot.send_message(user_id, text=result_text, reply_markup=keyboards.url_news_button(link),
+                               parse_mode="Markdown")
+    except:
+        msg = bot.send_message(user_id, text=escape_markdown_v2(result_text), reply_markup=keyboards.url_news_button(link),
+                               parse_mode="MarkdownV2")
+    bot.register_next_step_handler(msg, start_bot)
+
+
+def handle_sql_query_or_rag(message):
+    user_id = message.chat.id
+    user = user_dict.get(user_id)
+    user.recognized_text = ""
+    llm_result = user.llm_result
+
+    result_text = llm_result['output']
+    try:
+        msg = bot.send_message(user_id, text=result_text,
+                               parse_mode="Markdown")
+    except:
+        msg = bot.send_message(user_id, text=escape_markdown_v2(result_text),
+                               parse_mode="MarkdownV2")
+    bot.register_next_step_handler(msg, start_bot)
+
 
 
 @bot.message_handler(content_types=['text'])
 def start_bot(message):
     chat_id = message.chat.id
     user = user_dict[chat_id]
+    if message.text == "/start":
+        send_welcome(message)
     if message.text == "📑 Получить отчет":
         ReportService.send_report_to_user(int(chat_id), bot)
     elif message.text == "🔃 Изменить активы":
@@ -252,9 +231,8 @@ def start_bot(message):
                              text=escape_markdown_v2(results),
                              reply_markup=keyboards.get_all_news(), parse_mode="MarkdownV2")
 
-    elif message.content_type == "voice":
-        handle_voice(message)
-
+    else:
+        handle_clarification(message)
 
 def change_active(message):
     chat_id = message.chat.id
@@ -304,16 +282,17 @@ def confirm_insert(message):
         Repository.insert_data_table(
             int(chat_id),
             user.userfirstname + "&" + user.userlastname,
-            datetime.datetime.now().strftime('%d.%m.%Y'),
+            datetime.datetime.now().strftime('%Y-%m-%d'),
             user.type_active,
             user.name_active,
             user.shortname_active,
             user.count,
-            user.day_buy,
+            datetime.datetime.strptime(user.day_buy, '%d.%m.%Y').strftime('%Y-%m-%d'),
             user.price_buy_USD,
             user.price_buy_RUB
         )
         bot.send_message(chat_id, "✅ Данные успешно добавлены!", reply_markup=keyboards.back_to_start_markup())
+        user.recognized_text = ""
         bot.register_next_step_handler(message, send_welcome)
 
     elif text == "❌ Нет":
@@ -383,12 +362,12 @@ def change_cripto_db(message):
         result = req_db.loc[(req_db['type_active'] == user.type_active)]
 
         id = result["id"].tolist()
-        name_active = result["name_active"].tolist()
-        shortname_active = result["shortname_active"].tolist()
-        count = result["count"].tolist()
-        day_buy = result["day_buy"].tolist()
-        price_buy_USD = result["price_buy_USD"].tolist()
-        price_buy_RUB = result["price_buy_RUB"].tolist()
+        name_active = result["name_of_the_asset"].tolist()
+        shortname_active = result["second_name_of_the_asset"].tolist()
+        count = result["amount_of_asset"].tolist()
+        day_buy = result["asset_purchase_date"].tolist()
+        price_buy_USD = result["purchase_price_of_one_asset_in_dollars"].tolist()
+        price_buy_RUB = result["purchase_price_of_one_asset_in_rubles"].tolist()
 
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add(types.KeyboardButton("↩️Вернуться в начало"))

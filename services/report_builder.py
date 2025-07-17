@@ -18,20 +18,19 @@ SLOV_TYPE = {
 
 
 def det_text_to_report(df: pd.DataFrame) -> str:
-    # 1) Нарисовали базовую сводку покупок по активам
-    usd_rate = get_cbr_currency_price("USD")  # одна-единственная фича‍
+    usd_rate = get_cbr_currency_price("USD")
     df = df.copy()
-    df["total_buy_rub"] = df["count"] * df["price_buy_RUB"]
-    df["total_buy_usd"] = df["count"] * df["price_buy_USD"]
+    df["total_buy_rub"] = df["amount_of_asset"] * df["purchase_price_of_one_asset_in_rubles"]
+    df["total_buy_usd"] = df["amount_of_asset"] * df["purchase_price_of_one_asset_in_dollars"]
 
     df_grouped = (
         df
         .groupby(
-            ["type_active", "name_active", "shortname_active"],
+            ["type_active", "name_of_the_asset", "second_name_of_the_asset"],
             as_index=False
         )
         .agg({
-            "count": "sum",
+            "amount_of_asset": "sum",
             "total_buy_rub": "sum",
             "total_buy_usd": "sum",
         })
@@ -41,9 +40,9 @@ def det_text_to_report(df: pd.DataFrame) -> str:
     rows = []
     for _, row in df_grouped.iterrows():
         ta = row["type_active"]
-        symbol = row["shortname_active"]
-        name = row["name_active"]
-        cnt = row["count"]
+        symbol = row["second_name_of_the_asset"]
+        name = row["name_of_the_asset"]
+        cnt = row["amount_of_asset"]
         buy_rub = row["total_buy_rub"]
         buy_usd = row["total_buy_usd"]
 
@@ -111,10 +110,10 @@ def det_text_to_report(df: pd.DataFrame) -> str:
         for _, r in block.iterrows():
             lines += [
                 f"\n"
-                f" 🔹 *{r['name_active']}* — {r['count']:.4f}:",
+                f" 🔹 *{r['name_of_the_asset']}* — {r['amount_of_asset']:.4f}:",
                 f"🛒 Покупка: {fmt(r['total_buy_rub'])}₽ / {fmt(r['total_buy_usd'])}$",
                 f"📈 Текущая цена: {fmt(r['current_total_rub'])}₽ / {fmt(r['current_total_usd'])}$",
-                f"{color_circle(r['diff_rub'])} Разница: {fmt(r['diff_rub'])}₽ / {fmt(r['diff_usd'])}$",
+                f"{color_circle(r['diff_rub'], r['diff_usd'])} Разница: {fmt(r['diff_rub'])}₽ / {fmt(r['diff_usd'])}$",
             ]
 
         tot = summary[summary["type_active"] == ta].iloc[0]
@@ -123,7 +122,7 @@ def det_text_to_report(df: pd.DataFrame) -> str:
             f"*Итого по {title.upper()}:*",
             f"🛒 Покупка: {fmt(tot['total_buy_rub'])}₽ / {fmt(tot['total_buy_usd'])}$",
             f"📈 Текущая цена: {fmt(tot['current_total_rub'])}₽ / {fmt(tot['current_total_usd'])}$",
-            f"{color_circle(tot['diff_rub'])} Разница: {fmt(tot['diff_rub'])}₽ / {fmt(tot['diff_usd'])}$",
+            f"{color_circle(tot['diff_rub'], tot['diff_usd'])} Разница: {fmt(tot['diff_rub'])}₽ / {fmt(tot['diff_usd'])}$",
             "\n",
         ]
 
@@ -141,7 +140,7 @@ def det_text_to_report(df: pd.DataFrame) -> str:
         "*ИТОГО ПО ВСЕМ АКТИВАМ*",
         f"🛒 Покупка: {fmt(all_tot['total_buy_rub'])}₽ / {fmt(all_tot['total_buy_usd'])}$",
         f"📈 Текущая цена: {fmt(all_tot['current_total_rub'])}₽ / {fmt(all_tot['current_total_usd'])}$",
-        f"{color_circle(all_tot['diff_rub'])} Разница: {fmt(all_tot['diff_rub'])}₽ / {fmt(all_tot['diff_usd'])}$",
+        f"{color_circle(all_tot['diff_rub'], all_tot['diff_usd'])} Разница: {fmt(all_tot['diff_rub'])}₽ / {fmt(all_tot['diff_usd'])}$",
     ]
 
     return "\n".join(lines)
