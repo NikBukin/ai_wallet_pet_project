@@ -3,12 +3,16 @@ from telebot import types
 
 def main_menu_markup() -> types.ReplyKeyboardMarkup:
     """
-    Главное меню (2 кнопки): «Получить отчет» и «Изменить активы».
+    📑 Получить отчет
+    💭 Рекомендации из новостей
+    🔃 Изменить активы
+    📨 Настроить рассылку
     """
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton("📑 Получить отчет"))
     markup.add(types.KeyboardButton("💭 Рекомендации из новостей"))
     markup.add(types.KeyboardButton("🔃 Изменить активы"))
+    markup.add(types.KeyboardButton("📨 Настроить рассылку"))
     return markup
 
 
@@ -154,5 +158,63 @@ def get_all_news():
     markup = types.InlineKeyboardMarkup()
     button1 = types.InlineKeyboardButton("Получить", callback_data="get_all_news")
     markup.add(button1)
+
+    return markup
+
+def mailing_period_button():
+    """
+    Меню для выбора периода рассылки отчета
+    """
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("🔄 Ежедневно"))
+    markup.add(types.KeyboardButton("📆 Еженедельно"))
+    markup.add(types.KeyboardButton("📅 Ежемесячно"))
+    markup.add(types.KeyboardButton("↩️Вернуться в начало"))
+    return markup
+
+    return markup
+
+def mailing_week_button():
+    """
+    Меню для выбора дня недели для рассылки отчета
+    """
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("1⃣ Понедельник"))
+    markup.add(types.KeyboardButton("2⃣ Вторник"))
+    markup.add(types.KeyboardButton("3⃣ Среда"))
+    markup.add(types.KeyboardButton("4⃣ Четверг"))
+    markup.add(types.KeyboardButton("5⃣ Пятница"))
+    markup.add(types.KeyboardButton("6⃣ Суббота"))
+    markup.add(types.KeyboardButton("7⃣ Воскресенье"))
+    markup.add(types.KeyboardButton("↩️Вернуться в начало"))
+    return markup
+
+    return markup
+
+def mailing_day_button():
+    """
+    Меню для выбора дня недели для рассылки отчета
+    """
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("🚩 В начале месяца"))
+    markup.add(types.KeyboardButton("↔ В середине месяца"))
+    markup.add(types.KeyboardButton("🏁 В конце месяца"))
+    markup.add(types.KeyboardButton("↩️Вернуться в начало"))
+    return markup
+
+    return markup
+
+def mailing_time_button():
+    """
+    Меню для выбора времени рассылки отчета
+    """
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("🕙 10:00"))
+    markup.add(types.KeyboardButton("🕛 12:00"))
+    markup.add(types.KeyboardButton("🕑 14:00"))
+    markup.add(types.KeyboardButton("🕓 16:00"))
+    markup.add(types.KeyboardButton("🕕 18:00"))
+    markup.add(types.KeyboardButton("↩️Вернуться в начало"))
+    return markup
 
     return markup

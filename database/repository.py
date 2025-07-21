@@ -88,3 +88,37 @@ class Repository:
                 print(f"Обновлено строк: {cursor.rowcount}")
             except sqlite3.OperationalError as e:
                 print(f"Ошибка при обновлении: {e}")
+
+    @staticmethod
+    def update_mailing_settings(chat_id, mailing_period, mailing_day, mailing_week, mailing_time):
+        """
+        Удаление конкретной записи по уникальному ключу id
+        """
+        with Repository._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("DELETE FROM mailing_settings WHERE user_id = ?", (chat_id,))
+                conn.commit()
+            except sqlite3.OperationalError as e:
+                print(f"Ошибка при удалении: {e}")
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                   INSERT INTO mailing_settings (user_id, m_period, m_day_in_week, m_day, m_time)
+                   VALUES (?, ?, ?, ?, ?)
+                   """, (
+                       chat_id, mailing_period, mailing_week, mailing_day, mailing_time
+                   ))
+                conn.commit()
+            except sqlite3.OperationalError as e:
+                print(f"Ошибка при добавлении: {e}")
+
+    @staticmethod
+    def get_mailing_settings_all():
+        return pd.read_sql("SELECT * FROM mailing_settings", sqlite3.connect(DB_PATH))
+
+    @staticmethod
+    def get_mailing_settings(user_id: int):
+        query = "SELECT * FROM mailing_settings WHERE user_id = ?"
+        df = pd.read_sql(query, sqlite3.connect(DB_PATH), params=[user_id])
+        return df.iloc[0] if not df.empty else None

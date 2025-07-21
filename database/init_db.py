@@ -1,6 +1,9 @@
 import sqlite3
+from pathlib import Path
 
-DB_PATH = "db_active.db"
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH  = BASE_DIR / "db_active.db"
+conn = sqlite3.connect(DB_PATH)
 
 def init_db():
     """
@@ -24,8 +27,16 @@ def init_db():
         )
     """)
     conn.commit()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mailing_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            m_period TEXT,
+            m_day_in_week TEXT,
+            m_day TEXT,
+            m_time TEXT
+        )
+    """)
+    conn.commit()
     conn.close()
     print("База данных инициализирована.")
-
-if __name__ == "__main__":
-    init_db()

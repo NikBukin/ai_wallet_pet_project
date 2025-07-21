@@ -54,23 +54,31 @@ class User:
 
         self.llm_result = None
 
+        self.mailing_period = None
+        self.mailing_time = None
+        self.mailing_day = None
+        self.mailing_week = None
+
 
 # команда /start
 @bot.message_handler(commands=['start']
                      # , func=lambda message: message.chat.id in users
                      )
 def send_start(message):
-    print(message)
     chat_id = message.chat.id
-    userid = message.chat.id
-    user = User(userid)
+    user = User(chat_id)
     user_dict[chat_id] = user
     user.userfirstname = message.chat.first_name
     user.userlastname = message.chat.last_name
 
-    msg = bot.send_message(message.chat.id,
+    msg = bot.send_message(chat_id,
                            text="Привет!✌\n\n"
-                                "Я могу помочь тебе отслеживать стоимость активов 💸\nПодскажи, ты хочешь изменить состояние портфеля или получить подробный отчет?",
+                                "Я твой личный инвестиционный ассистент!🤖\n"
+                                "Ты можешь выбрать из предложенных вариантов или запросить в свободной форме:"
+                                "\n🆕 Добавление нового актива в портфель"
+                                "\n📈 Анализ твоего инвестиционного портфеля"
+                                "\n💭 Анализ новостей за последние сутки по любому активу"
+                                "\n🧐 Теоретическую информацию из моей базы знаний",
                            reply_markup=keyboards.main_menu_markup(), parse_mode="Markdown")
     bot.register_next_step_handler(msg, start_bot)
 
@@ -84,19 +92,24 @@ def send_welcome(message):
     user.userfirstname = message.chat.first_name
     user.userlastname = message.chat.last_name
 
-    msg = bot.send_message(message.chat.id,
+    msg = bot.send_message(chat_id,
                            text="Привет!✌\n\n"
-                                "Я могу помочь тебе отслеживать стоимость активов 💸\nПодскажи, ты хочешь изменить состояние портфеля или получить подробный отчет?",
+                                "Я твой личный инвестиционный ассистент!🤖\n"
+                                "Ты можешь выбрать из предложенных вариантов или запросить в свободной форме:"
+                                "\n🆕 Добавление нового актива в портфель"
+                                "\n📈 Анализ твоего инвестиционного портфеля"
+                                "\n💭 Анализ новостей за последние сутки по любому активу"
+                                "\n🧐 Теоретическую информацию из моей базы знаний",
                            reply_markup=keyboards.main_menu_markup(), parse_mode="Markdown")
     bot.register_next_step_handler(msg, start_bot)
 
 
 @bot.message_handler(content_types=['text', 'voice'])
 def handle_clarification(message):
-    user_id = message.chat.id
-    user = user_dict.get(user_id)
+    chat_id = message.chat.id
+    user = user_dict.get(chat_id)
     if user is None:
-        bot.send_message(user_id, "Пожалуйста, сначала нажмите /start.")
+        bot.send_message(chat_id, "Пожалуйста, сначала нажмите /start.")
         return
 
     if message.content_type == 'voice':
@@ -112,7 +125,7 @@ def handle_clarification(message):
     else:
         combined_input = user.recognized_text + " " + clarification_text
         user.recognized_text = combined_input
-        llm_result = llm_router(combined_input, user_id)
+        llm_result = llm_router(combined_input, chat_id)
         user.llm_result = llm_result
         if llm_result['used_tool'] == 'add_asset_tool':
             handle_add_asset(message)
@@ -123,8 +136,8 @@ def handle_clarification(message):
 
 
 def handle_add_asset(message):
-    user_id = message.chat.id
-    user = user_dict.get(user_id)
+    chat_id = message.chat.id
+    user = user_dict.get(chat_id)
     llm_result = user.llm_result
     parsed, missing = generate_answer(llm_result['tool_data']['data'])
     recognized_text = user.recognized_text
@@ -146,7 +159,7 @@ def handle_add_asset(message):
             "Пожалуйста, уточните недостающие данные (текстом или голосом), "
             "и я попробую дополнить."
         )
-        bot.send_message(user_id, ask)
+        bot.send_message(chat_id, ask)
         bot.register_next_step_handler(message, handle_clarification)
         return
 
@@ -170,40 +183,40 @@ def handle_add_asset(message):
         f"• Дата покупки: `{user.day_buy}`\n\n"
         "Добавить в базу?"
     )
-    msg = bot.send_message(user_id, text=confirm_text, reply_markup=keyboards.yes_or_no(),
+    msg = bot.send_message(chat_id, text=confirm_text, reply_markup=keyboards.yes_or_no(),
                            parse_mode="Markdown")
     bot.register_next_step_handler(msg, confirm_insert)
 
 
 def handle_analyze_news(message):
-    user_id = message.chat.id
-    user = user_dict.get(user_id)
+    chat_id = message.chat.id
+    user = user_dict.get(chat_id)
     user.recognized_text = ""
     llm_result = user.llm_result
 
     result_text = llm_result['tool_data']['result_text']
     link = llm_result['tool_data']['link']
     try:
-        msg = bot.send_message(user_id, text=result_text, reply_markup=keyboards.url_news_button(link),
+        msg = bot.send_message(chat_id, text=result_text, reply_markup=keyboards.url_news_button(link),
                                parse_mode="Markdown")
     except:
-        msg = bot.send_message(user_id, text=escape_markdown_v2(result_text), reply_markup=keyboards.url_news_button(link),
+        msg = bot.send_message(chat_id, text=escape_markdown_v2(result_text), reply_markup=keyboards.url_news_button(link),
                                parse_mode="MarkdownV2")
     bot.register_next_step_handler(msg, start_bot)
 
 
 def handle_sql_query_or_rag(message):
-    user_id = message.chat.id
-    user = user_dict.get(user_id)
+    chat_id = message.chat.id
+    user = user_dict.get(chat_id)
     user.recognized_text = ""
     llm_result = user.llm_result
 
     result_text = llm_result['output']
     try:
-        msg = bot.send_message(user_id, text=result_text,
+        msg = bot.send_message(chat_id, text=result_text,
                                parse_mode="Markdown")
     except:
-        msg = bot.send_message(user_id, text=escape_markdown_v2(result_text),
+        msg = bot.send_message(chat_id, text=escape_markdown_v2(result_text),
                                parse_mode="MarkdownV2")
     bot.register_next_step_handler(msg, start_bot)
 
@@ -215,8 +228,10 @@ def start_bot(message):
     user = user_dict[chat_id]
     if message.text == "/start":
         send_welcome(message)
-    if message.text == "📑 Получить отчет":
+    elif message.text == "📑 Получить отчет":
         ReportService.send_report_to_user(int(chat_id), bot)
+    elif message.text == "📨 Настроить рассылку":
+        mailing_setup(message)
     elif message.text == "🔃 Изменить активы":
         change_active(message)
     elif message.text == "💭 Рекомендации из новостей":
@@ -326,14 +341,14 @@ def change_db(message):
     result = req_db.loc[(req_db['type_active'] == user.type_active)]
 
     if len(result) > 0:
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text="Я нашел записи о твоих активах. Хочешь добавить еще или удалить текущие?",
                                reply_markup=keyboards.add_new_or_delete(), parse_mode="Markdown")
 
         bot.register_next_step_handler(msg, change_cripto_db)
 
     else:
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text="У меня нет информации о твоем активе 🧐\n"
                                     "Давай добавим?",
                                reply_markup=keyboards.add_new_or_to_start(), parse_mode="Markdown")
@@ -347,7 +362,7 @@ def change_cripto_db(message):
     if message.text == "↩️Вернуться в начало":
         send_welcome(message)
     elif message.text == "🆕 Добавить новый актив":
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text=f"Напиши название, а я постараюсь его найти 🔎\n\n"
                                     f"_Например: bitcoin, SBER, USD_",
                                reply_markup=keyboards.back_to_start_markup(), parse_mode="Markdown")
@@ -377,14 +392,14 @@ def change_cripto_db(message):
         for i in range(len(result)):
             markup.add(types.KeyboardButton(f"{i + 1}. {name_active[i]} - {count[i]}"))
             slov_to_del[f"{i + 1}. {name_active[i]} - {count[i]}"] = str(id[i])
-            bot.send_message(message.chat.id,
+            bot.send_message(chat_id,
                              text=f"{i + 1}. {escape_markdown(name_active[i])}({escape_markdown(shortname_active[i])}) - {escape_markdown(str(count[i]))}\n"
                                   f"Дата покупки - {escape_markdown(str(day_buy[i]))}\n"
                                   f"Цена покупки (в рублях) - {escape_markdown(str(price_buy_RUB[i]))}\n"
                                   f"Цена покупки (в долларах) - {escape_markdown(str(price_buy_USD[i]))}",
                              parse_mode="Markdown")
 
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text="Какую запись ты хочешь изменить\удалить?",
                                reply_markup=markup, parse_mode="Markdown")
         user.slov_to_del = slov_to_del
@@ -404,7 +419,7 @@ def search_cripto(message):
             if user.select_active[message.text][0] in all_cactive_name:
                 user.name_active = user.select_active[message.text][1]
                 user.shortname_active = user.select_active[message.text][0]
-                msg = bot.send_message(message.chat.id,
+                msg = bot.send_message(chat_id,
                                        text=f"Отлично, я нашел *{message.text}*\n"
                                             f"Добавляем в портфель?",
                                        reply_markup=keyboards.add_active_or_to_start(), parse_mode="Markdown")
@@ -412,7 +427,7 @@ def search_cripto(message):
         elif message.text in all_cactive_name:
             user.name_active = message.text
             user.shortname_active = slov[message.text]
-            msg = bot.send_message(message.chat.id,
+            msg = bot.send_message(chat_id,
                                    text=f"Отлично, я нашел *{message.text}*\n"
                                         f"Добавляем в портфель?",
                                    reply_markup=keyboards.add_active_or_to_start(), parse_mode="Markdown")
@@ -425,7 +440,7 @@ def search_cripto(message):
             for match, score, _ in results:
                 markup.add(types.KeyboardButton(match))
 
-            msg = bot.send_message(message.chat.id,
+            msg = bot.send_message(chat_id,
                                    text=f"Я не смог найти *{message.text}* 😓\n"
                                         f"Может что-то из этого _(список в кнопках)_?\n\n"
                                         f"Или попробуй написать иначе",
@@ -457,7 +472,7 @@ def insert_price_buy_USD(message):
             insert_day_buy(message)
         else:
             user.curr = "USD"
-            msg = bot.send_message(message.chat.id,
+            msg = bot.send_message(chat_id,
                                    text=f"Напиши сколько стоила единица актива в долларах США 💵\n"
                                         f"_Если значение не целочисленное, то пиши через точку (например 1.7873)_",
                                    reply_markup=keyboards.rub_price_or_to_start(), parse_mode="Markdown")
@@ -473,7 +488,7 @@ def insert_price_buy_RUB(message):
         send_welcome(message)
     elif message.text == "₽️Я знаю сколько в рублях":
         user.curr = "RUB"
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text=f"Напиши сколько стоила единица актива в российских рублях ₽\n"
                                     f"_Если значение не целочисленное, то пиши через точку (например 1.7873)_",
                                reply_markup=keyboards.usd_price_or_to_start(), parse_mode="Markdown")
@@ -494,7 +509,7 @@ def insert_day_buy(message):
     if message.text == "↩️Вернуться в начало":
         send_welcome(message)
     else:
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text=f"Напиши когда была осуществлена покупка\nЭто необходимо для предоставления подробного анализа.\n"
                                     f"_Формат типа дд.мм.гггг (например {datetime.datetime.now().strftime('%d.%m.%Y')})_",
                                reply_markup=keyboards.back_to_start_markup(), parse_mode="Markdown")
@@ -520,7 +535,7 @@ def insert_in_db(message):
                                  datetime.datetime.now().strftime('%d.%m.%Y'), user.type_active, user.name_active,
                                  user.shortname_active, user.count, user.day_buy, user.price_buy_USD,
                                  user.price_buy_RUB)
-    msg = bot.send_message(message.chat.id,
+    msg = bot.send_message(chat_id,
                            text=f"Данные успешно добавлены!",
                            reply_markup=keyboards.back_to_start_markup(), parse_mode="Markdown")
     bot.register_next_step_handler(msg, send_welcome)
@@ -533,7 +548,7 @@ def change_one_cripto_db(message):
     if message.text == "↩️Вернуться в начало":
         send_welcome(message)
     else:
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text=f"Ок, ты хочешь полностью удалить запись или изменить количество?",
                                reply_markup=keyboards.delete_options_markup(), parse_mode="Markdown")
         bot.register_next_step_handler(msg, change_one_cripto_db_2)
@@ -547,13 +562,13 @@ def change_one_cripto_db_2(message):
 
     elif message.text == "❌️Полностью удалить":
         Repository.delete_rows_by_condition(str(user.id_to_del))
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text=f"Запись удалена",
                                reply_markup=keyboards.back_to_start_markup(), parse_mode="Markdown")
         bot.register_next_step_handler(msg, send_welcome)
 
     elif message.text == "↩️Изменить количество":
-        msg = bot.send_message(message.chat.id,
+        msg = bot.send_message(chat_id,
                                text=f"Напиши новое количество\n"
                                     f"_Если значение не целочисленное, то пиши через точку (например 1.7873)_",
                                reply_markup=keyboards.back_to_start_markup(), parse_mode="Markdown")
@@ -567,17 +582,73 @@ def change_count_in_db(message):
         send_welcome(message)
     else:
         Repository.update_count_by_id((user.id_to_del), (message.text))
-        msg = bot.send_message(message.chat.id,
-                               text=f"Количество изменено",
+        msg = bot.send_message(chat_id,
+                               text="Количество изменено",
                                reply_markup=keyboards.back_to_start_markup(), parse_mode="Markdown")
         bot.register_next_step_handler(msg, send_welcome)
 
 
+def mailing_setup(message):
+    msg = bot.send_message(message.chat.id,
+                           text="Выберите период рассылки отчета",
+                           reply_markup=keyboards.mailing_period_button(), parse_mode="Markdown")
+    bot.register_next_step_handler(msg, mailing_day)
+
+
+def mailing_day(message):
+    chat_id = message.chat.id
+    user = user_dict[chat_id]
+    user.mailing_period = message.text
+    if message.text == "↩️Вернуться в начало":
+        send_welcome(message)
+    elif message.text == "📆 Еженедельно":
+        msg = bot.send_message(chat_id,
+                               text="Выберите день недели для рассылки отчета",
+                               reply_markup=keyboards.mailing_week_button(), parse_mode="Markdown")
+        bot.register_next_step_handler(msg, mailing_time)
+    elif message.text == "📅 Ежемесячно":
+        msg = bot.send_message(chat_id,
+                               text="Выберите дату рассылки отчета",
+                               reply_markup=keyboards.mailing_day_button(), parse_mode="Markdown")
+        bot.register_next_step_handler(msg, mailing_time)
+    elif message.text == "🔄 Ежедневно":
+        mailing_time(message)
+    else:
+        mailing_setup(message)
+
+
+def mailing_time(message):
+    chat_id = message.chat.id
+    user = user_dict[chat_id]
+    if message.text == "↩️Вернуться в начало":
+        send_welcome(message)
+    else:
+        if user.mailing_period == "📆 Еженедельно":
+            user.mailing_week = message.text
+        elif user.mailing_period == "📅 Ежемесячно":
+            user.day = message.text
+        msg = bot.send_message(chat_id,
+                               text="Выберите время рассылки",
+                               reply_markup=keyboards.mailing_time_button(), parse_mode="Markdown")
+        bot.register_next_step_handler(msg, mailing_time_final)
+
+
+def mailing_time_final(message):
+    chat_id = message.chat.id
+    user = user_dict[chat_id]
+    if message.text == "↩️Вернуться в начало":
+        send_welcome(message)
+    else:
+        user.mailing_time = message.text
+        Repository.update_mailing_settings(chat_id, user.mailing_period, user.mailing_day, user.mailing_week, user.mailing_time)
+        msg = bot.send_message(chat_id,
+                               text="Данные успешно сохранены, рассылка будет осуществляться в соответствии с указанными параметрами",
+                               reply_markup=keyboards.mailing_time_button(), parse_mode="Markdown")
+        bot.register_next_step_handler(msg, mailing_day)
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     chat_id = call.from_user.id
-    print(call)
     user = user_dict[chat_id]
     if call.data == "get_all_news":
         analysis_slov = user.analysis_slov
