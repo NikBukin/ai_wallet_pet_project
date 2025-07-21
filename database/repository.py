@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 
-DB_PATH = "database\db_active.db"
+DB_PATH = "database/db_active.db"
 
 class Repository:
     @staticmethod

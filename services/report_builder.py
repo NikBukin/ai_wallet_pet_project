@@ -47,10 +47,15 @@ def det_text_to_report(df: pd.DataFrame) -> str:
         buy_usd = row["total_buy_usd"]
 
         # вытаскиваем цену за единицу
-        try:
+        p_usd = p_rub = 0.0
+        i = 1
+        while p_usd == 0 and p_rub == 0 and i < 10:
             if ta == "cripto":
-                p_usd = get_crypto_price_coingecko(symbol, "usd")
-                p_rub = p_usd * usd_rate
+                try:
+                    p_usd = get_crypto_price_coingecko(symbol, "usd")
+                    p_rub = p_usd * usd_rate
+                except:
+                    pass
             elif ta == "stock_rus":
                 try:
                     p_rub = get_moex_stock_price(ticker=symbol, board="TQBR")
@@ -68,8 +73,7 @@ def det_text_to_report(df: pd.DataFrame) -> str:
                 p_rub = usd_rate
             else:
                 p_usd = p_rub = 0.0
-        except Exception:
-            p_usd = p_rub = 0.0
+            i += 1
 
         total_rub = cnt * p_rub
         total_usd = cnt * p_usd

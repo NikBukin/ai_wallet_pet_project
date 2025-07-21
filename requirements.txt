@@ -7,6 +7,7 @@ rapidfuzz
 schedule
 pytz
 yfinance
+backoff
 feedparser
 langchain
 langchain_community
@@ -18,4 +19,5 @@ faiss-cpu
 torch
 torchvision
 torchaudio
+sentence-transformers
 --index-url https://download.pytorch.org/whl/cu118

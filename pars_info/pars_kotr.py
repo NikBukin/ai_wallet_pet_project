@@ -4,6 +4,7 @@ import time
 import xml.etree.ElementTree as ET
 import pandas as pd
 import yfinance as yf
+import backoff
 
 
 ## Криптовалюта
@@ -37,22 +38,33 @@ def get_historical_prices(symbol_id:str, from_date:str, to_date:str)->list:
     return sorted(result.items())
 
 
-# Криптовалюта в моменте
-def get_crypto_price_coingecko(symbol_id:str, vs_currency:str)->float:
+@backoff.on_exception(
+    backoff.expo,
+    (requests.exceptions.RequestException, RuntimeError),
+    max_time=30,   # перестаём пытаться через 30 с
+    jitter=None,
+)
+def get_crypto_price_coingecko(symbol_id: str, vs_currency: str) -> float:
     """
     Выводит текущую стоимость монеты
     :param symbol_id: тикер криптовалюты (например, bitcoin)
     :param vs_currency: валюта, в которой необходимо выдать стоимость криптовалюты
     """
     url = f"https://api.coingecko.com/api/v3/simple/price"
-    params = {
-        "ids": symbol_id,
-        "vs_currencies": vs_currency
-    }
-    r = requests.get(url, params=params)
-    data = r.json()
-    return data[symbol_id][vs_currency]
+    HEADERS = {"User-Agent": "ai-wallet-bot/0.1 (+https://github.com/...)"}
+    params = {"ids": symbol_id, "vs_currencies": vs_currency}
+    r = requests.get(url, params=params, headers=HEADERS, timeout=5)
 
+    if r.status_code == 429:
+        # CoinGecko может прислать Retry-After
+        raise RuntimeError("rate-limited")
+
+    r.raise_for_status()           # 4xx / 5xx → исключение
+
+    try:
+        return r.json()[symbol_id][vs_currency]
+    except (KeyError, TypeError):
+        raise RuntimeError("unexpected payload")
 
 
 # Список крипты
@@ -160,12 +172,14 @@ def get_foreign_stock_price(ticker:str)->float:
     Выводит текущую стоимость иностранной акции
     :param ticker: тикер акции (например, AAPL)
     """
-    stock = yf.Ticker(ticker)
-    data = stock.history(period="1d", interval="1m")
-    if data.empty:
-        return None
-    return float(data["Close"].iloc[-1])
-
+    price = None
+    i = 0
+    while price is None and i < 10:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period="1d", interval="1m")
+        price = float(data["Close"].iloc[-1])
+        i += 1
+    return price
 
 # Список иностранных акций
 # S&P 500
