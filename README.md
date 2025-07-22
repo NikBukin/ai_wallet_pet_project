@@ -148,7 +148,6 @@ ai_wallet_pet_project
 | **Zero-Shot ReAct** | `models/llm_router.py` | Агент рассуждает, выбирает один из 4 LangChain-инструментов: `add_asset`, `analyze_news`, `sql_query`, `rag_tool`. |
 | **Tool-former prompt** | `llm_sql_database_toolkit.py` | В системном тексте описано схему таблицы `assets` и формат желаемого SQL, чтобы GPT генерировал корректные запросы. |
 | **Structured output** | `llm_insert_active.py` | Попросили LLM вернуть JSON → безопасный парсинг и запись в БД. |
-| **News-TL;DR шаблон** | `llm_news_analysis.py` | Просим сгруппировать заголовки по активам, затем «вычлени причину ценового движения». |
 | **RAG-prompt** | `llm_with_RAG.py` | В системном тексте указываем: «Если факт найден в книге — процитируй № страницы». |
 
 
