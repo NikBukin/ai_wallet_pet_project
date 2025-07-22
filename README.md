@@ -212,5 +212,6 @@ FOLDER_ID_LLM=b1go...
 ## 9. Скринкаст с демонстрацией работы
 
 
-https://github.com/user-attachments/assets/a7ffffcf-f7d4-4940-846c-353e9ac8e93a
+https://github.com/user-attachments/assets/724d4757-1660-4d87-975a-ef970baf206f
+
 
