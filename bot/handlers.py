@@ -644,7 +644,7 @@ def mailing_time_final(message):
         msg = bot.send_message(chat_id,
                                text="Данные успешно сохранены, рассылка будет осуществляться в соответствии с указанными параметрами",
                                reply_markup=keyboards.mailing_time_button(), parse_mode="Markdown")
-        bot.register_next_step_handler(msg, mailing_day)
+        bot.register_next_step_handler(msg, send_welcome)
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
