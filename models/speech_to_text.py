@@ -6,9 +6,9 @@ from transformers import pipeline
 
 
 asr = pipeline(
-    "automatic-speech-recognition",
-    model="openai/whisper-small",
-    device=0
+    'automatic-speech-recognition',
+    model='openai/whisper-tiny',
+    device='cpu'
 )
 
 
@@ -34,6 +34,7 @@ def generate_text_from_voice(ogg_bytes):
         except: pass
         try: os.remove(wav_path)
         except: pass
+        print(f"⚠️ Ошибка конвертации OGG→WAV: {e}")
         return f"⚠️ Ошибка конвертации OGG→WAV: {e}"
     finally:
         try: os.remove(ogg_path)
@@ -47,12 +48,14 @@ def generate_text_from_voice(ogg_bytes):
     except Exception as e:
         try: os.remove(wav_path)
         except: pass
+        print(f"⚠️ Ошибка распознавания: {e}")
         return f"⚠️ Ошибка распознавания: {e}"
     finally:
         try: os.remove(wav_path)
         except: pass
 
     if not recognized_text:
+        print("⚠️ Не удалось распознать голос.")
         return "⚠️ Не удалось распознать голос."
 
     return recognized_text

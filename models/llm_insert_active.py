@@ -113,8 +113,6 @@ def llm_insert_active(input_text: str, llm) -> dict:
                 rate = ruble_df["rate"].to_list()[0]
             else:
                 print(f"Не удалось получить курс валюты на дату {final_data['day_buy']}.")
-
-
             if final_data["currency"].upper() == "USD":
                 final_data["price_buy_USD"] = final_data["price"]
                 final_data["price_buy_RUB"] = final_data["price_buy_USD"] * rate

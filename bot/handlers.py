@@ -197,10 +197,17 @@ def handle_analyze_news(message):
     result_text = llm_result['tool_data']['result_text']
     link = llm_result['tool_data']['link']
     try:
-        msg = bot.send_message(chat_id, text=result_text, reply_markup=keyboards.url_news_button(link),
+        if link:
+            msg = bot.send_message(chat_id, text=result_text, reply_markup=keyboards.url_news_button(link),
                                parse_mode="Markdown")
+        else:
+            msg = bot.send_message(chat_id, text=result_text,
+                                   parse_mode="Markdown")
     except:
-        msg = bot.send_message(chat_id, text=escape_markdown_v2(result_text), reply_markup=keyboards.url_news_button(link),
+        if link:
+            msg = bot.send_message(chat_id, text=escape_markdown_v2(result_text), reply_markup=keyboards.url_news_button(link),
+                               parse_mode="MarkdownV2")
+        msg = bot.send_message(chat_id, text=result_text,
                                parse_mode="MarkdownV2")
     bot.register_next_step_handler(msg, start_bot)
 
@@ -235,7 +242,7 @@ def start_bot(message):
     elif message.text == "🔃 Изменить активы":
         change_active(message)
     elif message.text == "💭 Рекомендации из новостей":
-        results, analysis_slov = llm_news_analysis.analyze_assets_with_news(int(chat_id), bot)
+        results, analysis_slov = llm_news_analysis.analyze_assets_with_news(chat_id)
         user.analysis_slov = analysis_slov
         try:
             bot.send_message(chat_id,
@@ -663,12 +670,22 @@ def callback_query(call):
             link = analysis_new["link"][0]
 
             try:
-                bot.send_message(chat_id,
+                if link:
+                    bot.send_message(chat_id,
                                  text=f"Для {name_active}\n"
                                       f"{results}",
                                  reply_markup=keyboards.url_news_button(link), parse_mode="Markdown")
+                else:
+                    bot.send_message(chat_id,
+                                     text=f"Для {name_active}\n"
+                                          f"{results}", parse_mode="Markdown")
             except:
-                bot.send_message(chat_id,
+                if link:
+                    bot.send_message(chat_id,
                                  text=escape_markdown_v2(f"Для {name_active}\n"
                                                          f"{results}"),
                                  reply_markup=keyboards.url_news_button(link), parse_mode="MarkdownV2")
+                else:
+                    bot.send_message(chat_id,
+                                     text=f"Для {name_active}\n"
+                                          f"{results}", parse_mode="MarkdownV2")

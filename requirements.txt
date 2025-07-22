@@ -11,6 +11,7 @@ backoff
 feedparser
 langchain
 langchain_community
+hf_xet
 grpcio
 yandexcloud
 pydub

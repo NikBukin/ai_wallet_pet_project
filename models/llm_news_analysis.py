@@ -23,11 +23,23 @@ def get_news_texts(name: str, type_active: str, shortname: str) -> list:
     :return:
     """
     if type_active == "stock_rus":
-        return [[n["text"], n["link"]] for n in pars_news.get_finam_news([shortname]) if n["text"]]
+        try:
+            news = pars_news.get_finam_news([name])
+        except:
+            news = pars_news.get_finam_news([shortname])
+        return [[n["text"], n["link"]] for n in news if n["text"]]
     elif type_active in ["stock_for", "metal"]:
-        return [[n["text"], n["link"]] for n in pars_news.get_yahoo_news(name) if n["text"]]
+        try:
+            news = pars_news.get_yahoo_news([name])
+        except:
+            news = pars_news.get_yahoo_news([shortname])
+        return [[n["text"], n["link"]] for n in news if n["text"]]
     elif type_active == "cripto":
-        return [[n["text"], n["link"]] for n in pars_news.get_crypto_news(name) if n["text"]]
+        try:
+            news = pars_news.get_crypto_news([name])
+        except:
+            news = pars_news.get_crypto_news([shortname])
+        return [[n["text"], n["link"]] for n in news if n["text"]]
     else:
         return [[]]
 
@@ -75,11 +87,7 @@ def llm_find_active(input_text:str, llm)->dict:
         if line.strip() and not line.strip().startswith(("Текст:", "Актив:", "Вопрос", "Ответ")):
             cleaned_active_name = line.strip()
             break
-
-    print("active (из LLM, после очистки и со стоп-последовательностью):", cleaned_active_name)
-
     result = search_active.find_best_match_func(cleaned_active_name)
-    print("result (после search_active):", result)
     return result
 
 
@@ -101,7 +109,7 @@ def llm_news_analysis(name_active: str, shortname_active: str, type_active: str,
     - Общий тон (позитивный/негативный/нейтральный).
     - Краткую информацию
     - Дай рекомендацию для покупки, продажи или удержания на основе полученного текста.
-
+    
     Вот свежие новости:
     {news_text}
 
@@ -113,7 +121,6 @@ def llm_news_analysis(name_active: str, shortname_active: str, type_active: str,
     try:
         news = get_news_texts(name_active, type_active, shortname_active)
         if not news or not news[0] or not news[0][0]:
-            print(f"По активу {name_active} нет новостей или текст новости пуст.")
             return None, None  # Возвращаем (None, None)
 
         news_text, link = news[0]  # Получаем текст и ссылку
@@ -139,14 +146,14 @@ def analyze_assets_with_news(chat_id: int) -> tuple[str, dict]:
     :return:
     """
     assets = Repository.select_by_id_telebot(chat_id)
-    assets = assets[['name_active', 'shortname_active', 'type_active']].drop_duplicates().to_dict(orient='records')
+    assets = assets[['name_of_the_asset', 'second_name_of_the_asset', 'type_active']].drop_duplicates().to_dict(orient='records')
 
     all_analysis = {}
     news_summary = ""
 
     for asset in assets:
-        name = asset["name_active"]
-        short = asset["shortname_active"]
+        name = asset["name_of_the_asset"]
+        short = asset["second_name_of_the_asset"]
         type_act = asset["type_active"]
 
         analysis, link = llm_news_analysis(name, short, type_act, llm)

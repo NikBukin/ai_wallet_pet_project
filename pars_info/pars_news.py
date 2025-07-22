@@ -44,7 +44,7 @@ def extract_article_text(url:str)->str:
         return ""
 
 # Российские акции Finam
-def get_finam_news(ticker_list:list, max_entries=10, min_score=70)->list:
+def get_finam_news(ticker_list:list, max_entries=5, min_score=70)->list:
     """
     Получение новостей российских ценных бумаг с finam.ru по заданным активам
     :param ticker_list: список активов (Например, SBER, GAZP, LKOH)
@@ -61,7 +61,7 @@ def get_finam_news(ticker_list:list, max_entries=10, min_score=70)->list:
         published_dt = datetime.strptime(entry.published, '%a, %d %b %Y %H:%M:%S %z')
         now = datetime.now(published_dt.tzinfo)
 
-        if published_dt < now - timedelta(days=2):
+        if published_dt < now - timedelta(days=5):
             continue
 
         title = entry.title
@@ -94,7 +94,7 @@ def get_finam_news(ticker_list:list, max_entries=10, min_score=70)->list:
 
 
 # Иностранные акции и металлы через Yahoo Finance RSS
-def get_yahoo_news(query:str, max_entries=10)->list:
+def get_yahoo_news(query:str, max_entries=5)->list:
     """
     Получение новостей иностранных ценных бумаг с yahoo.com по заданному активу
     :param query: иностранная ценная бумага
@@ -108,7 +108,7 @@ def get_yahoo_news(query:str, max_entries=10)->list:
         published_str = entry.published
         published_dt = datetime.strptime(published_str, '%a, %d %b %Y %H:%M:%S %z')
         now = datetime.now(published_dt.tzinfo)
-        if published_dt > now - timedelta(days=1):
+        if published_dt > now - timedelta(days=5):
             news.append({
                 "title": entry.title,
                 "link": entry.link,
@@ -120,7 +120,7 @@ def get_yahoo_news(query:str, max_entries=10)->list:
 
 
 # CryptoCompare – криптовалюты
-def get_crypto_news(query:str, max_entries=10)->list:
+def get_crypto_news(query:str, max_entries=5)->list:
     """
     Получение новостей криптовалют с cryptocompare.com по заданному активу
     :param query: название монеты
@@ -134,7 +134,7 @@ def get_crypto_news(query:str, max_entries=10)->list:
         published_str = item["published_on"]
         published_dt = datetime.fromtimestamp(published_str)
         now = datetime.now(published_dt.tzinfo)
-        if (query.lower() in item["title"].lower() or query.lower() in item["body"].lower()) and published_dt > now - timedelta(days=1):
+        if (query[0].lower() in item["title"].lower() or query[0].lower() in item["body"].lower()) and published_dt > now - timedelta(days=5):
             results.append({
                 "title": item["title"],
                 "link": item["url"],
